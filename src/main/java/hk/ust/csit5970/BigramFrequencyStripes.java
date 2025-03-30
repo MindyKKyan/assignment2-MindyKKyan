@@ -48,17 +48,22 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 		@Override
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
-			String line = ((Text) value).toString();
+			String line = value.toString();
 			String[] words = line.trim().split("\\s+");
 
-			/*
-			 * TODO: Your implementation goes here.
-			 */
+			for (int i = 0; i < words.length - 1; i++) {
+				KEY.set(words[i]);
+				STRIPE.clear();
+
+				// Add the next word to the stripe
+				STRIPE.increment(words[i + 1]);
+				context.write(KEY, STRIPE);
+			}
 		}
 	}
 
 	/*
-	 * TODO: write your reducer to aggregate all stripes associated with each key
+	 * Reducer: aggregates all stripes associated with each key
 	 */
 	private static class MyReducer extends
 			Reducer<Text, HashMapStringIntWritable, PairOfStrings, FloatWritable> {
@@ -72,14 +77,25 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 		public void reduce(Text key,
 				Iterable<HashMapStringIntWritable> stripes, Context context)
 				throws IOException, InterruptedException {
-			/*
-			 * TODO: Your implementation goes here.
-			 */
+			SUM_STRIPES.clear();
+
+			// Aggregate all stripes
+			for (HashMapStringIntWritable stripe : stripes) {
+				SUM_STRIPES.plus(stripe);
+			}
+
+			// Emit each bigram and its frequency
+			int totalCount = SUM_STRIPES.getTotalCount();
+			for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
+				BIGRAM.set(key.toString(), entry.getKey());
+				FREQ.set((float) entry.getValue() / totalCount);
+				context.write(BIGRAM, FREQ);
+			}
 		}
 	}
 
 	/*
-	 * TODO: Write your combiner to aggregate all stripes with the same key
+	 * Combiner: aggregates all stripes with the same key
 	 */
 	private static class MyCombiner
 			extends
@@ -91,9 +107,15 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 		public void reduce(Text key,
 				Iterable<HashMapStringIntWritable> stripes, Context context)
 				throws IOException, InterruptedException {
-			/*
-			 * TODO: Your implementation goes here.
-			 */
+			SUM_STRIPES.clear();
+
+			// Aggregate all stripes
+			for (HashMapStringIntWritable stripe : stripes) {
+				SUM_STRIPES.plus(stripe);
+			}
+
+			// Emit the combined stripe
+			context.write(key, SUM_STRIPES);
 		}
 	}
 
